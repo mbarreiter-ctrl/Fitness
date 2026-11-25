@@ -74,7 +74,7 @@ function barChart({ labels, stacks, w = 340, h = 160, yFmt = v => fmt(v, 0), hig
       svg += `<path d="${d}" fill="${s.color}" ${highlightLast && i !== n - 1 ? 'opacity=".7"' : ''}/>`;
       acc += v;
     });
-    svg += `<text x="${x + bwi / 2}" y="${h - 6}" class="axis" text-anchor="middle">${lab}</text>`;
+    if (n <= 6 || (n - 1 - i) % 2 === 0) svg += `<text x="${x + bwi / 2}" y="${h - 6}" class="axis" text-anchor="middle">${lab}</text>`;
   });
   return svg + '</svg>';
 }

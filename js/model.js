@@ -4,16 +4,16 @@
    Orientierung: Untrainierte legen in Studien in 8–12 Wochen typischerweise 20–30 % zu,
    Trainierte (1–3 Jahre) eher 0,3–0,8 %/Woche, Erfahrene nur noch wenige Prozent pro Jahr. */
 const LEVELS = {
-  anf:  { name: 'Anfänger',        weekly: 0.020, windowWeeks: 4,  desc: 'Weniger als ca. 1 Jahr regelmäßiges Krafttraining' },
-  fort: { name: 'Fortgeschritten', weekly: 0.005, windowWeeks: 6,  desc: '1–3 Jahre, Steigerungen von Woche zu Woche werden schwerer' },
-  erf:  { name: 'Erfahren',        weekly: 0.0015, windowWeeks: 10, desc: 'Mehr als 3 Jahre, Fortschritt eher über Monate' },
+  anf:  { name: 'Anfänger',        weekly: 0.020, windowWeeks: 4,  desc: 'Weniger als 1 Jahr' },
+  fort: { name: 'Fortgeschritten', weekly: 0.005, windowWeeks: 6,  desc: '1 bis 3 Jahre' },
+  erf:  { name: 'Erfahren',        weekly: 0.0015, windowWeeks: 10, desc: 'Mehr als 3 Jahre' },
 };
 /* Ziel fürs Körpergewicht → Faktor auf die erwartete Kraftsteigerung.
    Im Kaloriendefizit ist Kraft halten bei Trainierten bereits ein Erfolg. */
 const GOALS = {
-  aufbau:   { name: 'Zunehmen / Aufbauen', short: 'Aufbauen',  factor: { anf: 1.0, fort: 1.0, erf: 1.0 } },
-  halten:   { name: 'Gewicht halten',      short: 'Halten',    factor: { anf: 0.85, fort: 0.75, erf: 0.6 } },
-  abnehmen: { name: 'Abnehmen',            short: 'Abnehmen',  factor: { anf: 0.4, fort: 0.1, erf: 0 } },
+  aufbau:   { name: 'Zunehmen', short: 'Zunehmen', desc: 'Mehr essen als du verbrauchst – so wirst du am schnellsten stärker',  factor: { anf: 1.0, fort: 1.0, erf: 1.0 } },
+  halten:   { name: 'Gewicht halten', short: 'Halten', desc: 'Etwa so viel essen, wie du verbrauchst',    factor: { anf: 0.85, fort: 0.75, erf: 0.6 } },
+  abnehmen: { name: 'Abnehmen', short: 'Abnehmen', desc: 'Weniger essen – Gewichte im Gym zu halten ist dann schon gut',  factor: { anf: 0.4, fort: 0.1, erf: 0 } },
 };
 /* Wie stark eine Woche mit n Einheiten derselben Übung zählt (abnehmender Grenznutzen). */
 function freqFactor(n) { return n <= 0 ? 0 : n === 1 ? 0.6 : n === 2 ? 0.9 : 1.0; }
@@ -58,7 +58,7 @@ function exerciseHistory(exId) {
       volume += (s.kg || 0) * s.reps;
       if (v > best) { best = v; bestSet = s; }
     }
-    out.push({ t: w.t, workoutId: w.id, e1rm: best, bestSet, sets, volume, maxReps: Math.max(...sets.map(s => s.reps)), light: !!entry.mode });
+    out.push({ t: w.t, workoutId: w.id, e1rm: best, bestSet, sets, volume, maxReps: Math.max(...sets.map(s => s.reps)), light: !!entry.mode, note: entry.note || '' });
   }
   return out.sort((a, b) => a.t - b.t);
 }
@@ -96,20 +96,20 @@ function expectedGain(sessions, t0, t1) {
 
 const STATUS = {
   gut:       { label: 'Auf Kurs',          cls: 'mint',     emoji: '🚀' },
-  stark:     { label: 'Stark unterwegs', cls: 'mint', emoji: '🔥' },
-  langsam:   { label: 'Etwas langsam',     cls: 'butter',   emoji: '🐢' },
-  plateau:   { label: 'Stagnation',        cls: 'rose',     emoji: '⛰️' },
+  stark:     { label: 'Über Erwartung', cls: 'mint', emoji: '🔥' },
+  langsam:   { label: 'Unter Erwartung',     cls: 'butter',   emoji: '🐢' },
+  plateau:   { label: 'Stagniert',        cls: 'rose',     emoji: '⛰️' },
   rueckgang: { label: 'Rückgang',          cls: 'rose',     emoji: '📉' },
   halten:    { label: 'Kraft gehalten',    cls: 'sky',      emoji: '🛡️' },
   pause:     { label: 'Lange Pause',       cls: 'lavender', emoji: '💤' },
-  neu:       { label: 'Sammelt Daten',     cls: 'lavender', emoji: '🌱' },
+  neu:       { label: 'Noch zu wenig Daten',     cls: 'lavender', emoji: '🌱' },
 };
 
 /* Kernanalyse einer Übung */
 function analyzeExercise(exId, now = Date.now()) {
   const all = exerciseHistory(exId);
   // Bewusst leichte Einheiten (Deload, Wiedereinstieg) zählen nicht in den Trend
-  const hist = all.filter(h => !h.light);
+  const hist = all.filter(h => !h.light && h.e1rm > 0); // Sätze ohne Gewicht bei Gewichtsübungen sind nicht vergleichbar
   const p = S.profile || { level: 'anf', goal: 'aufbau' };
   const lvl = LEVELS[p.level] || LEVELS.anf;
   const res = { exId, hist: all, trendHist: hist, status: 'neu', reg: null };
@@ -120,8 +120,19 @@ function analyzeExercise(exId, now = Date.now()) {
 
   const t0 = now - lvl.windowWeeks * 7 * DAY;
   let win = hist.filter(h => h.t >= t0);
-  // Mindestens 4 Einheiten betrachten, falls vorhanden
-  if (win.length < 4) win = hist.slice(-4);
+  // Mindestens 4 Einheiten betrachten – aber nur, wenn sie nicht zu weit zurückliegen
+  if (win.length < 4) {
+    const last4 = hist.slice(-4);
+    if (last4[0].t >= now - lvl.windowWeeks * 2 * 7 * DAY) win = last4;
+  }
+  // Langfristige Entwicklung: Schnitt der ersten 3 vs. letzten 3 Einheiten
+  if (hist.length >= 4) {
+    const k = Math.min(3, Math.floor(hist.length / 2));
+    const avg = arr => arr.reduce((x, h) => x + h.e1rm, 0) / arr.length;
+    res.longTermPct = (avg(hist.slice(-k)) / avg(hist.slice(0, k)) - 1) * 100;
+    res.longTermFrom = hist[0].t;
+  }
+  if (!win.length) { res.status = res.daysSinceLast > 28 ? 'pause' : 'neu'; return res; }
   res.window = win;
   res.windowStart = win[0].t;
   const spanDays = (last.t - win[0].t) / DAY;
@@ -149,7 +160,7 @@ function analyzeExercise(exId, now = Date.now()) {
 
   if (res.daysSinceLast > 28) res.status = 'pause';
   else if (actual < -0.03) res.status = 'rueckgang';
-  else if (res.ratio === null) res.status = actual >= -0.02 ? 'halten' : 'rueckgang';
+  else if (res.ratio === null) res.status = actual >= 0.03 ? 'gut' : actual >= Math.min(-0.02, exp.gain - 0.02) ? 'halten' : 'rueckgang';
   else if (res.ratio >= 1.4) res.status = 'stark';
   else if (res.ratio >= 0.7) res.status = 'gut';
   else if (res.ratio >= 0.3 || win.length < 4 || spanDays < 21) res.status = 'langsam';
@@ -162,7 +173,7 @@ function suggestWeight(exId, repsMin = 8, repsMax = 12) {
   const ex = exById(exId);
   const a = analyzeExercise(exId);
   if (!a.hist.length) {
-    return { type: 'neu', kg: null, text: 'Neue Übung: wähle ein Gewicht, bei dem du nach dem letzten Satz noch 2–3 Wiederholungen schaffen würdest.' };
+    return { type: 'neu', kg: null, text: 'Neue Übung. Nimm ein Gewicht, bei dem noch 2–3 Wiederholungen gehen würden.' };
   }
   const lastAny = a.hist[a.hist.length - 1];
   const last = a.trendHist.length ? a.trendHist[a.trendHist.length - 1] : lastAny;
@@ -174,31 +185,31 @@ function suggestWeight(exId, repsMin = 8, repsMax = 12) {
   const goal = S.profile?.goal;
 
   if (ex.bw && topKg === 0) {
-    if (minReps >= repsMax) return { type: 'up', kg: 0, text: `Alle Sätze mit ${repsMax}+ Wdh. – nimm Zusatzgewicht (z. B. 2,5 kg) oder eine schwerere Variante.` };
-    return { type: 'hold', kg: 0, text: `Ziel: ${minReps + 1} Wdh. in jedem Satz.` };
+    if (minReps >= repsMax) return { type: 'up', kg: 0, text: `${repsMax}+ Wdh. geschafft. Zeit für Zusatzgewicht oder eine schwerere Variante.` };
+    return { type: 'hold', kg: 0, text: `Ziel: ${minReps + 1} Wdh. pro Satz.` };
   }
   if (a.daysSinceLast > 21) {
     const kg = Math.max(0, floorTo(topKg * 0.9, inc));
-    return { type: 'return', kg, text: `Nach ${Math.round(a.daysSinceLast)} Tagen Pause: mit ca. 90 % (${fmt(kg)} kg) wieder einsteigen und in 1–2 Wochen hochsteigern.` };
+    return { type: 'return', kg, text: `${Math.round(a.daysSinceLast)} Tage Pause. Steig mit ${fmt(kg)} kg wieder ein (−10 %).` };
   }
   if (lastAny.light && lastAny !== last) {
-    return { type: 'hold', kg: topKg, text: `Nach der leichten Einheit: zurück auf ${fmt(topKg)} kg – mit frischen Kräften geht oft mehr.` };
+    return { type: 'hold', kg: topKg, text: `Zurück auf ${fmt(topKg)} kg.` };
   }
   if (a.status === 'plateau' || a.status === 'rueckgang') {
     const kg = Math.max(0, floorTo(topKg * 0.9, inc));
     return {
       type: 'deload', kg,
-      text: `Stagnation erkannt. Vorschlag: eine leichtere Woche mit ${fmt(kg)} kg (−10 %), danach neu aufbauen – oder Wiederholungsbereich wechseln (z. B. ${repsMax > 8 ? '5–8' : '10–15'}).`,
+      text: `Kein Fortschritt seit Wochen. Mach eine leichte Einheit mit ${fmt(kg)} kg – oder wechsel zu ${repsMax > 8 ? '5–8' : '10–15'} Wdh.`,
     };
   }
   if (minReps >= repsMax) {
     const kg = topKg + inc;
-    return { type: 'up', kg, text: `Letztes Mal alle Sätze mit ${repsMax}+ Wdh. – Zeit für ${fmt(kg)} kg. Starte bei ${repsMin} Wdh.` };
+    return { type: 'up', kg, text: `Letztes Mal ${repsMax}+ Wdh. in jedem Satz. Jetzt ${fmt(kg)} kg.` };
   }
   if (goal === 'abnehmen' && S.profile?.level !== 'anf') {
-    return { type: 'hold', kg: topKg, text: `Beim Abnehmen sind gleichbleibende Gewichte schon gut. Bleib bei ${fmt(topKg)} kg, Ziel ${Math.min(minReps + 1, repsMax)} Wdh.` };
+    return { type: 'hold', kg: topKg, text: `${fmt(topKg)} kg halten, Ziel ${Math.min(minReps + 1, repsMax)} Wdh. Beim Abnehmen reicht das.` };
   }
-  return { type: 'hold', kg: topKg, text: `Bleib bei ${fmt(topKg)} kg und versuche ${Math.min(minReps + 1, repsMax)} Wdh. in jedem Satz.` };
+  return { type: 'hold', kg: topKg, text: `${fmt(topKg)} kg, Ziel ${Math.min(minReps + 1, repsMax)} Wdh. pro Satz.` };
 }
 
 /* Sätze pro Muskelgruppe in einem Zeitraum (primär = 1, sekundär = 0,5) */

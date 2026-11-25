@@ -43,3 +43,14 @@ Die Daten liegen nur im Speicher der App auf dem Gerät. Unter *Profil → Backu
 - **Gewichtsvorschläge** folgen der doppelten Progression: Erst wenn alle Sätze das obere Ende des Wiederholungsbereichs erreichen, kommt mehr Gewicht dazu.
 - **Muskelvolumen**: 10–20 Sätze pro Muskel und Woche gelten als optimaler Bereich. Mitbeteiligte Muskeln zählen halb.
 - **Kraft-Richtwerte** gibt es nur für die fünf großen Langhantelübungen. Es sind grobe Werte relativ zum Körpergewicht.
+
+## Daten aus anderen Apps importieren
+
+Unter *Profil → Aus anderer App importieren* lässt sich ein CSV-Export einlesen, z. B. von FitnessOnline (Spalten: Datum, Übung, Satz, Gewicht (kg), Wdh., Uhrzeit, Notiz). Vor dem Übernehmen zeigt die App eine Vorschau.
+
+- Bekannte Übungsnamen werden dem Katalog zugeordnet (`js/import.js`, `IMPORT_MAP`). Unbekannte Namen werden als eigene Übung angelegt, die Muskelgruppe schätzt die App anhand von Stichworten.
+- Notizen wie „liegend“, „Kurzhantel“ oder „Smith“ machen aus einer Einheit eine eigene Variante. So sieht ein Gerätewechsel nicht wie Kraftverlust aus.
+- Zeitübungen (Planke 30 s) und Cardio landen als Notiz am Training.
+- Ein erneuter Import ersetzt die zuvor importierten Trainings, statt sie doppelt anzulegen.
+
+CSV-Dateien sind per `.gitignore` vom Repository ausgeschlossen, damit persönliche Trainingsdaten nicht öffentlich werden.

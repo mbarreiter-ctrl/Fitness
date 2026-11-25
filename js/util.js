@@ -79,6 +79,7 @@ function relDay(t) {
   if (d < 7) return `vor ${d} Tagen`;
   return fmtDate(t);
 }
+function relDayInline(t) { const r = relDay(t); return r === 'Heute' || r === 'Gestern' ? r.toLowerCase() : r; }
 function fmtDuration(min) {
   min = Math.round(min);
   if (min < 60) return `${min} min`;
